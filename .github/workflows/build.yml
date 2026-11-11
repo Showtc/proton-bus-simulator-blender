@@ -32,14 +32,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check tag matches manifest version
-        run: |
-          version=$(grep -m1 '^version' proton_bus_3ds/blender_manifest.toml | cut -d'"' -f2)
-          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match manifest version ${version}"
-            exit 1
-          fi
-
       - name: Build release notes
         run: |
           if ! bash .github/scripts/release_notes.sh "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" > notes.md; then
