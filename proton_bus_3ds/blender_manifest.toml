@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "proton_bus_3ds"
-version = "0.6.0"
+version = "1.0.0"
 name = "Proton Bus 3DS Tools"
 tagline = "3DS import/export and bus INI import for Proton Bus Simulator"
 maintainer = "Showtc"
