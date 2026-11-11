@@ -21,9 +21,14 @@ jobs:
 
       - name: Check the tagged commit is on main
         run: |
-          git fetch origin main
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-            echo "::error::Tag ${GITHUB_REF_NAME} is not on a commit of main"
+          # Fetch main into an explicit ref, so the check never depends on how checkout set up the remote
+          git fetch --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+          tag_commit=$(git rev-parse "${GITHUB_REF_NAME}^{commit}")
+          main_commit=$(git rev-parse origin/main)
+          echo "Tag ${GITHUB_REF_NAME}: ${tag_commit}"
+          echo "main:     ${main_commit}"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_commit"; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (${tag_commit}) is not on main (${main_commit}). Push main before the tag, then re-run this workflow."
             exit 1
           fi
 
