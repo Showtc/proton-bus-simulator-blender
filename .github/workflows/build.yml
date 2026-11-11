@@ -41,11 +41,28 @@ jobs:
           cat notes.md
 
       - name: Install Blender runtime libraries
+        # The runner image already has most of them: only install what's missing, retry on
+        # network errors, and don't fail here (the Blender check below reports real problems).
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
-            libsm6 libice6 libgl1 libegl1
+          packages="libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 libgl1 libegl1"
+          missing=""
+          for p in $packages; do
+            dpkg -s "$p" >/dev/null 2>&1 || missing="$missing $p"
+          done
+          if [ -z "$missing" ]; then
+            echo "All libraries already installed"
+            exit 0
+          fi
+          echo "Installing:$missing"
+          for attempt in 1 2 3; do
+            if sudo apt-get update -o Acquire::Retries=3 && \
+               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 $missing; then
+              exit 0
+            fi
+            echo "apt attempt $attempt failed, retrying in 20 s"
+            sleep 20
+          done
+          echo "::warning::Could not install:$missing (package servers unreachable). Continuing."
 
       - name: Cache Blender
         id: cache-blender
@@ -58,11 +75,21 @@ jobs:
         if: steps.cache-blender.outputs.cache-hit != 'true'
         run: |
           series="${BLENDER_VERSION%.*}"
-          curl -fsSL -o blender.tar.xz \
+          curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o blender.tar.xz \
             "https://download.blender.org/release/Blender${series}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
           mkdir blender
           tar -xf blender.tar.xz -C blender --strip-components=1
           rm blender.tar.xz
+
+      - name: Check Blender libraries
+        run: |
+          missing=$(ldd ./blender/blender | grep "not found" || true)
+          if [ -n "$missing" ]; then
+            echo "::error::Blender is missing system libraries:"
+            echo "$missing"
+            exit 1
+          fi
+          ./blender/blender --version | head -1
 
       - name: Validate manifest
         run: ./blender/blender --factory-startup --command extension validate proton_bus_3ds
