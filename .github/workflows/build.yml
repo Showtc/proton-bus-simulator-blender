@@ -1,0 +1,91 @@
+name: Release extension
+
+# Runs only when a v* tag is pushed. The tagged commit must be on main.
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  # Same Blender as the local install (blender-4.5.13-lts)
+  BLENDER_VERSION: "4.5.13"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history, to check the tag is on main
+
+      - name: Check the tagged commit is on main
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} is not on a commit of main"
+            exit 1
+          fi
+
+      - name: Check tag matches manifest version
+        run: |
+          version=$(grep -m1 '^version' proton_bus_3ds/blender_manifest.toml | cut -d'"' -f2)
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match manifest version ${version}"
+            exit 1
+          fi
+
+      - name: Build release notes
+        run: |
+          if ! bash .github/scripts/release_notes.sh "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" > notes.md; then
+            echo "::error::changelog.md is missing or empty"
+            exit 1
+          fi
+          cat notes.md
+
+      - name: Install Blender runtime libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 \
+            libsm6 libice6 libgl1 libegl1
+
+      - name: Cache Blender
+        id: cache-blender
+        uses: actions/cache@v4
+        with:
+          path: blender
+          key: blender-${{ env.BLENDER_VERSION }}-linux-x64
+
+      - name: Download Blender
+        if: steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          series="${BLENDER_VERSION%.*}"
+          curl -fsSL -o blender.tar.xz \
+            "https://download.blender.org/release/Blender${series}/blender-${BLENDER_VERSION}-linux-x64.tar.xz"
+          mkdir blender
+          tar -xf blender.tar.xz -C blender --strip-components=1
+          rm blender.tar.xz
+
+      - name: Validate manifest
+        run: ./blender/blender --factory-startup --command extension validate proton_bus_3ds
+
+      - name: Smoke test
+        run: ./blender/blender -b --factory-startup --python-exit-code 1 --python tests/smoke_test.py
+
+      - name: Build extension zip
+        run: |
+          rm -rf proton_bus_3ds/__pycache__
+          mkdir -p dist
+          ./blender/blender --factory-startup --command extension build \
+            --source-dir proton_bus_3ds --output-dir dist
+          mv dist/proton_bus_3ds-*.zip dist/proton-bus-simulator-blender.zip
+          ls -l dist
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/proton-bus-simulator-blender.zip \
+            --title "Proton Bus 3DS Tools ${GITHUB_REF_NAME}" \
+            --notes-file notes.md
