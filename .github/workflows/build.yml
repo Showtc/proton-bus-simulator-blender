@@ -41,10 +41,14 @@ jobs:
           cat notes.md
 
       - name: Install Blender runtime libraries
-        # The runner image already has most of them: only install what's missing, retry on
-        # network errors, and don't fail here (the Blender check below reports real problems).
+        # Libraries Blender needs in background (-b) mode. The runner image already ships them,
+        # so this normally installs nothing and never touches apt. It can't block a release:
+        # it's capped at 3 minutes and its failure is ignored (the Blender check below reports
+        # any library that is really missing).
+        timeout-minutes: 3
+        continue-on-error: true
         run: |
-          packages="libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 libgl1 libegl1"
+          packages="libx11-6 libxi6 libxxf86vm1 libxfixes3 libxrender1 libxkbcommon0 libsm6 libice6 libgl1"
           missing=""
           for p in $packages; do
             dpkg -s "$p" >/dev/null 2>&1 || missing="$missing $p"
@@ -54,15 +58,8 @@ jobs:
             exit 0
           fi
           echo "Installing:$missing"
-          for attempt in 1 2 3; do
-            if sudo apt-get update -o Acquire::Retries=3 && \
-               sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 $missing; then
-              exit 0
-            fi
-            echo "apt attempt $attempt failed, retrying in 20 s"
-            sleep 20
-          done
-          echo "::warning::Could not install:$missing (package servers unreachable). Continuing."
+          sudo apt-get update -o Acquire::Retries=1
+          sudo apt-get install -y --no-install-recommends $missing
 
       - name: Cache Blender
         id: cache-blender
