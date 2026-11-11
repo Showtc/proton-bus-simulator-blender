@@ -1,0 +1,24 @@
+schema_version = "1.0.0"
+
+id = "proton_bus_3ds"
+version = "0.6.0"
+name = "Proton Bus 3DS Tools"
+tagline = "3DS import/export and bus INI import for Proton Bus Simulator"
+maintainer = "Showtc"
+type = "add-on"
+
+tags = ["Import-Export"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-2.0-or-later"]
+copyright = [
+    "2005 Bob Holcomb",
+    "2011-2023 Blender Foundation",
+    "2020-2024 Sebastian Schrand (NRG Sille)",
+    "2024 Arturo Cervantes (PBSU 3DS changes)",
+    "2026 Showtc",
+]
+
+[permissions]
+files = "Copy 3DS files to textures folder, read INI, write exports"
